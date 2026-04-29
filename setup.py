@@ -24,6 +24,7 @@ setup(
             'second_step = ros2_project_sc23m2t.second_step:main',
             'third_step = ros2_project_sc23m2t.third_step:main',
             'fourth_step = ros2_project_sc23m2t.fourth_step:main',
+            'ros2_project_sc23m2t = ros2_project_sc23m2t.ros2_project_sc23m2t:main',
         ],
     },
 )
