@@ -31,27 +31,23 @@ class RobotProject(Node):
         self.blue_detected  = False
         self.blue_close     = False
 
-        self.close_threshold  = 6000
         self.detect_threshold = 300
+        self.close_threshold  = 6000
 
         self.navigating       = False
         self.current_goal_idx = 0
         self.task_complete    = False
 
         self.waypoints = [
-            # Move to blue box area 
             (-1.0, -5.0,  270.0),
             (-2.0, -7.0,  270.0),
-            (-3.5, -9.0,    0.0),  
-            # Move to green box area 
+            (-3.5, -9.0,    0.0),
             ( 0.0, -7.0,    0.0),
             ( 3.0, -7.0,    0.0),
-            ( 4.9, -7.5,   90.0),  
-            # Move to red box area 
+            ( 4.9, -7.5,   90.0),
             ( 5.0, -4.0,   90.0),
             ( 6.5, -2.0,   90.0),
-            ( 6.9, -0.1,  180.0), 
-            # Back to centre
+            ( 6.9, -0.1,  180.0),
             ( 3.0, -4.0,  180.0),
             ( 0.0,  0.0,  180.0),
         ]
@@ -74,10 +70,8 @@ class RobotProject(Node):
         hsv_red_upper1 = np.array([10,  255, 255])
         hsv_red_lower2 = np.array([170, 100, 100])
         hsv_red_upper2 = np.array([179, 255, 255])
-
         hsv_green_lower = np.array([60 - self.sensitivity, 100, 100])
         hsv_green_upper = np.array([60 + self.sensitivity, 255, 255])
-
         hsv_blue_lower  = np.array([120 - self.sensitivity, 100, 100])
         hsv_blue_upper  = np.array([120 + self.sensitivity, 255, 255])
 
@@ -107,7 +101,8 @@ class RobotProject(Node):
             if cv2.contourArea(c) > self.detect_threshold:
                 (x, y), radius = cv2.minEnclosingCircle(c)
                 cv2.circle(image, (int(x), int(y)), int(radius), bgr, 3)
-                cv2.putText(image, colour_name, (int(x) - 30, int(y) - int(radius) - 10),
+                cv2.putText(image, colour_name,
+                            (int(x) - 30, int(y) - int(radius) - 10),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.6, bgr, 2)
                 if colour_name == 'RED' and not self.red_detected:
                     self.get_logger().info('RED box detected!')
@@ -125,7 +120,8 @@ class RobotProject(Node):
             if area > self.detect_threshold:
                 (x, y), radius = cv2.minEnclosingCircle(c)
                 cv2.circle(image, (int(x), int(y)), int(radius), (255, 0, 0), 3)
-                cv2.putText(image, 'BLUE', (int(x) - 30, int(y) - int(radius) - 10),
+                cv2.putText(image, 'BLUE',
+                            (int(x) - 30, int(y) - int(radius) - 10),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 0), 2)
                 if not self.blue_detected:
                     self.get_logger().info('BLUE box detected!')
@@ -133,7 +129,8 @@ class RobotProject(Node):
                 if area > self.close_threshold:
                     self.blue_close = True
                     cv2.putText(image, 'WITHIN 1m - STOPPING',
-                                (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
+                                (10, 30), cv2.FONT_HERSHEY_SIMPLEX,
+                                0.7, (255, 0, 0), 2)
         return image
 
     def send_nav_goal(self, x, y, yaw_deg):
@@ -179,6 +176,16 @@ class RobotProject(Node):
         twist = Twist()
         self.publisher.publish(twist)
         self.get_logger().info('Robot stopped.')
+        
+    def cancel_goal(self):
+        try:
+            if self.nav_client._goal_handles:
+                for goal_handle_ref in self.nav_client._goal_handles.values():
+                    goal_handle = goal_handle_ref()
+                    if goal_handle is not None:
+                        goal_handle.cancel_goal_async()
+        except Exception as e:
+            self.get_logger().warn(f'Could not cancel goal: {e}')
 
 
 def main():
@@ -197,24 +204,17 @@ def main():
 
     try:
         while rclpy.ok():
-            if robot.task_complete:
-                robot.stop()
-                time.sleep(0.5)
-                continue
 
-            if robot.blue_close:
+            if robot.blue_close and robot.red_detected and robot.green_detected:
                 robot.get_logger().info(
                     f'Task complete! Red: {robot.red_detected}, '
                     f'Green: {robot.green_detected}, Blue: {robot.blue_detected}')
+                robot.cancel_goal()
                 robot.stop()
                 robot.task_complete = True
-                continue
+                break
 
             if robot.navigating:
-                time.sleep(0.2)
-                continue
-
-            if robot.blue_detected and not robot.blue_close:
                 time.sleep(0.2)
                 continue
 
@@ -223,7 +223,7 @@ def main():
                 robot.send_nav_goal(wp[0], wp[1], wp[2])
                 robot.current_goal_idx += 1
             else:
-                robot.get_logger().info('All waypoints visited, restarting loop.')
+                robot.get_logger().info('All waypoints visited, restarting.')
                 robot.current_goal_idx = 0
 
             time.sleep(0.2)
